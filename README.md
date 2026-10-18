@@ -14,6 +14,8 @@ The application can run as a local-only GitHub Pages site or as a shared Render 
 
 Everyone using the Render address shares the same teams, skills, line status and shift plan. The GitHub Pages address remains local-only. Never commit the application password or database URL to GitHub.
 
+The supplied Blueprint uses Render's free PostgreSQL plan for initial testing. Render currently expires free PostgreSQL databases after 30 days. Before using Lineflow as a permanent production system, upgrade the database plan in Render (the smallest paid PostgreSQL compute plan is sufficient for this application).
+
 ## GitHub Pages
 
 Publish this repository from the root of the default branch using GitHub Pages. The site entry point is `index.html`.
