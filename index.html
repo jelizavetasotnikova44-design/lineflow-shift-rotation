@@ -10,12 +10,12 @@
 <body>
   <header class="topbar">
     <a class="brand" href="#"><span class="brand-mark">LF</span><span>lineflow</span></a>
-    <nav><button class="nav-active">Today</button><button id="teamBtn">Team</button><button id="scheduleBtn">Schedule</button></nav>
+    <nav><button class="nav-active" id="todayBtn">Today</button><button id="workersBtn">Workers</button><button id="scheduleBtn">Schedule</button></nav>
     <span class="cloud-status local" id="cloudStatus" title="Storage status"><i></i><b>Local only</b></span>
     <button class="icon-btn" id="resetBtn" aria-label="Reset data">↻</button>
   </header>
 
-  <main>
+  <main id="dashboardView">
     <section class="hero">
       <div>
         <p class="eyebrow" id="todayLabel"></p>
@@ -83,6 +83,15 @@
       <div class="section-head"><div><p class="eyebrow">SHIFT PLAN</p><h2>Rotations and breaks</h2></div><button class="ghost" id="exportBtn">Copy plan</button></div>
       <div class="timeline" id="timeline"></div>
     </section>
+  </main>
+
+  <main class="attendance-view hidden" id="attendanceView">
+    <section class="attendance-hero">
+      <div><p class="eyebrow">ALL FIVE TEAMS</p><h1>Workers today</h1><p>Mark attendance before creating the plan. Only employees marked Present will be used in assignments, rotations and break cover.</p></div>
+      <button class="ghost" id="backToPlanBtn" type="button">← Back to plan</button>
+    </section>
+    <section class="attendance-summary" id="attendanceSummary"></section>
+    <section class="attendance-teams" id="attendanceTeams"></section>
   </main>
 
   <dialog id="teamDialog">
