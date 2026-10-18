@@ -14,23 +14,49 @@ const POSITIONS=[
 const defaultPeople=[
  ['Anna',['Packer','AP']],['Marek',['Palletizer','WT','W2']],['Sofia',['Packer','W1','Stacker trained']],['Dmitri',['AP','WT']],['Karol',['Palletizer','Packer','W2']],['Olga',['WT','W1','Stacker trained']],['Victor',['Palletizer','AP']],['Elena',['Packer','WT']],['Jan',['Palletizer','W1','W2','Stacker trained']],['Irina',['AP','Packer']],['Nikolai',['WT','Palletizer']],['Maria',['Packer','AP']],['Alex',['Palletizer','Packer','AP','WT','W1','W2','SC','Stacker trained']]
 ].map((p,i)=>({id:'p'+i,name:p[0],skills:p[1]}));
-const saved=JSON.parse(localStorage.getItem('lineflow-v1')||'null');
-let state=saved||{shift:'morning',started:false,people:defaultPeople,assignments:{},breaks:{},productCooldowns:{},hotCooldowns:{}};
-state.team=TEAMS[state.team]?state.team:'red';
-state.people=state.people||[];
-state.assignments=state.assignments||{};
-state.breaks=state.breaks||{};
-state.productCooldowns=state.productCooldowns||{};
-state.hotCooldowns=state.hotCooldowns||{};
-state.notRequiredPositions=state.notRequiredPositions||[];
+const LOCAL_KEY='lineflow-v1';
+function freshState(){return {shift:'morning',team:'red',started:false,people:JSON.parse(JSON.stringify(defaultPeople)),assignments:{},breaks:{},productCooldowns:{},hotCooldowns:{},notRequiredPositions:[],disabledLines:[]}}
 function emptyTeamData(){return {people:[],assignments:{},breaks:{},productCooldowns:{},hotCooldowns:{},notRequiredPositions:[],started:false}}
+function normalizeState(input){
+ const next=input&&typeof input==='object'?input:freshState();
+ next.shift=SHIFTS[next.shift]?next.shift:'morning';next.team=TEAMS[next.team]?next.team:'red';
+ next.people=Array.isArray(next.people)?next.people:[];next.assignments=next.assignments||{};next.breaks=next.breaks||{};next.productCooldowns=next.productCooldowns||{};next.hotCooldowns=next.hotCooldowns||{};next.notRequiredPositions=next.notRequiredPositions||[];
+ if(!next.teamData){next.teamData={};next.teamData[next.team]={people:next.people,assignments:next.assignments,breaks:next.breaks,productCooldowns:next.productCooldowns,hotCooldowns:next.hotCooldowns,notRequiredPositions:next.notRequiredPositions,started:!!next.started}}
+ const active=next.teamData[next.team]||emptyTeamData();next.people=active.people||[];next.assignments=active.assignments||{};next.breaks=active.breaks||{};next.productCooldowns=active.productCooldowns||{};next.hotCooldowns=active.hotCooldowns||{};next.notRequiredPositions=active.notRequiredPositions||[];next.started=!!active.started;
+ next.disabledLines=(next.disabledLines||[]).map(String);return next;
+}
+let state=normalizeState(JSON.parse(localStorage.getItem(LOCAL_KEY)||'null'));
 function captureTeamData(){return {people:state.people,assignments:state.assignments,breaks:state.breaks,productCooldowns:state.productCooldowns,hotCooldowns:state.hotCooldowns,notRequiredPositions:state.notRequiredPositions,started:!!state.started}}
 function applyTeamData(data){const next=data||emptyTeamData();state.people=next.people||[];state.assignments=next.assignments||{};state.breaks=next.breaks||{};state.productCooldowns=next.productCooldowns||{};state.hotCooldowns=next.hotCooldowns||{};state.notRequiredPositions=next.notRequiredPositions||[];state.started=!!next.started}
 function syncActiveTeam(){state.teamData=state.teamData||{};state.teamData[state.team]=captureTeamData()}
-if(!state.teamData){state.teamData={};syncActiveTeam()}else applyTeamData(state.teamData[state.team]||emptyTeamData());
-state.disabledLines=(state.disabledLines||[]).map(String);
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-function save(){syncActiveTeam();localStorage.setItem('lineflow-v1',JSON.stringify(state))}
+const cloud={active:false,version:0,applying:false,dirty:false,timer:null,pollTimer:null,connecting:false};
+function cloudStatus(mode,label){const el=$('#cloudStatus');if(!el)return;el.className='cloud-status '+mode;el.querySelector('b').textContent=label;el.title=mode==='connected'?'Shared data is synced with Render':'Storage status: '+label}
+function save(){syncActiveTeam();localStorage.setItem(LOCAL_KEY,JSON.stringify(state));if(cloud.active&&!cloud.applying)scheduleCloudSave()}
+function scheduleCloudSave(){cloud.dirty=true;cloudStatus('saving','Saving…');clearTimeout(cloud.timer);cloud.timer=setTimeout(pushCloudState,700)}
+async function pushCloudState(){
+ clearTimeout(cloud.timer);cloud.timer=null;if(!cloud.active)return;syncActiveTeam();
+ try{
+  const response=await fetch('/api/state',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({version:cloud.version,data:state})});
+  const payload=await response.json();
+  if(response.status===409&&payload.data){applyCloudState(payload,true);toast('A newer cloud change was loaded');return}
+  if(!response.ok)throw new Error(payload.error||'Cloud save failed');
+  cloud.version=payload.version;cloud.dirty=false;cloudStatus('connected','Cloud saved');
+ }catch(error){cloud.dirty=true;cloudStatus('error','Cloud offline');console.warn(error)}
+}
+function applyCloudState(payload,force=false){
+ if(!payload?.data||(!force&&(cloud.dirty||cloud.timer)))return;
+ cloud.applying=true;state=normalizeState(payload.data);cloud.version=Number(payload.version||0);localStorage.setItem(LOCAL_KEY,JSON.stringify(state));render();cloud.applying=false;cloud.dirty=false;cloudStatus('connected','Cloud connected');
+}
+async function pullCloudState(initial=false){
+ const response=await fetch('/api/state',{cache:'no-store'});if(!response.ok)throw new Error('Cloud state unavailable');const payload=await response.json();
+ if(payload.data){if(initial||Number(payload.version)>cloud.version)applyCloudState(payload,initial)}else if(initial){cloud.version=0;await pushCloudState()}cloudStatus('connected','Cloud connected');
+}
+async function initCloud(){
+ if(cloud.connecting||cloud.active)return;cloud.connecting=true;cloudStatus('saving','Connecting…');
+ try{const health=await fetch('/api/health',{cache:'no-store'});if(!health.ok)throw new Error('Cloud is not configured');cloud.active=true;await pullCloudState(true);cloudStatus('connected','Cloud connected');cloud.pollTimer=setInterval(()=>{const task=cloud.dirty&&!cloud.timer?pushCloudState():pullCloudState(false);Promise.resolve(task).catch(()=>cloudStatus('error','Cloud offline'))},8000)}
+ catch(error){cloud.active=false;cloudStatus(location.hostname.endsWith('github.io')?'local':'error',location.hostname.endsWith('github.io')?'Local only':'Cloud offline');console.info(error.message)}finally{cloud.connecting=false}
+}
 function minsToTime(mins){mins=(mins+1440)%1440;return String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0')}
 function shiftMinute(offset=0){return SHIFTS[state.shift].start*60+offset}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -354,7 +380,7 @@ $$('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
 $('#personForm').onsubmit=e=>{e.preventDefault();const name=$('#personName').value.trim();const skills=$$('#skillPicks input:checked').map(x=>x.value);state.people.push({id:'p'+Date.now(),name,skills});e.target.reset();render();toast(name+' added')};
 $('#excelPaste').oninput=updateExcelPreview;
 $('#importExcelBtn').onclick=()=>{const incoming=parseExcelPeople($('#excelPaste').value);let added=0,updated=0;incoming.forEach((person,i)=>{const existing=state.people.find(p=>p.name.trim().toLowerCase()===person.name.toLowerCase());if(existing){const merged=[...new Set([...existing.skills,...person.skills])];if(merged.length!==existing.skills.length){existing.skills=merged;updated++}}else{state.people.push({id:'p'+Date.now()+'-'+i,name:person.name,skills:person.skills});added++}});$('#excelPaste').value='';updateExcelPreview();render();toast(`Imported: ${added} new${updated?', '+updated+' updated':''}`)};
-$('#resetBtn').onclick=()=>{if(confirm('Reset employees and the plan to the demo version?')){localStorage.removeItem('lineflow-v1');location.reload()}};
+$('#resetBtn').onclick=()=>{const warning=cloud.active?'Reset the shared employee list and plan for ALL users?':'Reset employees and the plan to the demo version?';if(confirm(warning)){localStorage.removeItem(LOCAL_KEY);state=normalizeState(freshState());render();if(cloud.active)pushCloudState();else location.reload()}};
 $('#exportBtn').onclick=async()=>{const text=$$('.event').map(e=>e.innerText.replace(/\n/g,' — ')).join('\n');await navigator.clipboard.writeText(text);toast('Plan copied')};
 function printPlan(){document.body.classList.add('printing-plan');window.print()}
 window.addEventListener('afterprint',()=>document.body.classList.remove('printing-plan'));
@@ -364,4 +390,5 @@ updateClock();setInterval(updateClock,15000);
 const currentPositions=POSITIONS.flatMap(group=>group.items.map(item=>item[0]));
 if(!Object.keys(state.assignments).length||Object.keys(state.assignments).some(pos=>!currentPositions.includes(pos)))assignInitial();
 render();
+initCloud();window.addEventListener('online',()=>{if(!cloud.active)initCloud()});
 
