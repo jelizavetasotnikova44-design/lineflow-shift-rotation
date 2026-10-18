@@ -19,8 +19,8 @@ services:
 
 databases:
   - name: lineflow-database
-    # Safe for testing. Upgrade in Render before day 30 for permanent storage.
-    plan: free
+    # Smallest permanent PostgreSQL plan; does not expire after 30 days.
+    plan: 0.1c-256mb
     region: frankfurt
     databaseName: lineflow
     user: lineflow
