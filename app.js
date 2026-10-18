@@ -66,16 +66,18 @@ function positionArea(pos){const n=lineNumber(pos);return n?String(n):['AP','MP'
 function isHotPosition(pos){return HOT_LINE_AREAS.includes(positionArea(pos))}
 function hotTransitionBlocked(sourcePos,targetPos){const source=positionArea(sourcePos),target=positionArea(targetPos);return HOT_LINE_AREAS.includes(source)&&HOT_LINE_AREAS.includes(target)&&source!==target}
 function isDisabled(pos){const area=positionArea(pos);return area&&state.disabledLines.includes(area)}
+function isPresent(person){return person?.present!==false}
+function presentPeople(people=state.people){return (people||[]).filter(isPresent)}
 function personById(id){return state.people.find(p=>p.id===id)}
 function positionItem(pos){return POSITIONS.flatMap(group=>group.items).find(item=>item[0]===pos)}
 function positionFloor(pos){return POSITIONS.find(group=>group.items.some(item=>item[0]===pos))?.line||null}
 function isProductionFloor(floor){return floor==='F1'||floor==='F2'}
-function getWTPool(){return state.people.filter(person=>person.skills.includes('WT')).sort((a,b)=>a.name.localeCompare(b.name))}
+function getWTPool(){return presentPeople().filter(person=>person.skills.includes('WT')).sort((a,b)=>a.name.localeCompare(b.name))}
 function normalizeWTAssignments(){const wtIds=new Set(getWTPool().map(person=>person.id));Object.keys(state.assignments).forEach(pos=>{if(wtIds.has(state.assignments[pos]))delete state.assignments[pos]})}
 function getExtraPool(assignments=state.assignments){
  const linePeople=new Set(Object.entries(assignments).filter(([pos,id])=>id&&positionArea(pos)).map(([,id])=>id));
  const assignedPosition=new Map(Object.entries(assignments).filter(([,id])=>id).map(([pos,id])=>[id,pos]));
- return state.people.filter(person=>!person.skills.includes('WT')&&!linePeople.has(person.id)).map(person=>({person,position:assignedPosition.get(person.id)||'Available'})).sort((a,b)=>{
+ return presentPeople().filter(person=>!person.skills.includes('WT')&&!linePeople.has(person.id)).map(person=>({person,position:assignedPosition.get(person.id)||'Available'})).sort((a,b)=>{
    const rank=x=>x.position==='Available'?0:x.position.startsWith('Extra')?1:/^W[12]/.test(x.position)?2:x.position==='Shift coordinator'?3:4;
    return rank(a)-rank(b)||a.person.name.localeCompare(b.person.name);
  });
@@ -94,27 +96,28 @@ function removeUncoveredNew(assignments){
 }
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1800)}
 function assignInitial(){
- const used=new Set(); state.assignments={};
+ const people=presentPeople(),used=new Set(); state.assignments={};
  const slots=POSITIONS.flatMap(x=>x.items).filter(([pos])=>!isDisabled(pos)&&!state.notRequiredPositions.includes(pos)).sort((a,b)=>Number(!!a[2])-Number(!!b[2]));
- slots.forEach(([pos,skill])=>{let p=state.people.find(p=>!p.skills.includes('WT')&&!used.has(p.id)&&(skill==='Any'||p.skills.includes(skill)));if(!p)p=state.people.find(p=>!p.skills.includes('WT')&&!used.has(p.id));if(p){state.assignments[pos]=p.id;used.add(p.id)}});
+ slots.forEach(([pos,skill])=>{let p=people.find(p=>!p.skills.includes('WT')&&!used.has(p.id)&&(skill==='Any'||p.skills.includes(skill)));if(!p)p=people.find(p=>!p.skills.includes('WT')&&!used.has(p.id));if(p){state.assignments[pos]=p.id;used.add(p.id)}});
  removeUncoveredNew(state.assignments);
 }
 function render(){
  normalizeWTAssignments();
+ Object.keys(state.assignments).forEach(pos=>{if(!isPresent(personById(state.assignments[pos])))delete state.assignments[pos]});
  const cfg=SHIFTS[state.shift];
  $$('.shift').forEach(b=>b.classList.toggle('active',b.dataset.shift===state.shift));
  $$('[data-team]').forEach(b=>{const active=b.dataset.team===state.team;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
- $$('[data-team-count]').forEach(el=>{const team=el.dataset.teamCount,count=team===state.team?state.people.length:(state.teamData?.[team]?.people?.length||0);el.textContent=count+' people'});
+ $$('[data-team-count]').forEach(el=>{const team=el.dataset.teamCount,people=team===state.team?state.people:(state.teamData?.[team]?.people||[]);el.textContent=presentPeople(people).length+' / '+people.length+' Present'});
  $('#teamDialogTeam').textContent=TEAMS[state.team];
- $('#peopleCount').textContent=state.people.length;
- $('#trainedCount').textContent=state.people.filter(p=>p.skills.length>=3).length+' multi-skilled';
+ $('#peopleCount').textContent=presentPeople().length;
+ $('#trainedCount').textContent=presentPeople().filter(p=>p.skills.length>=3).length+' multi-skilled';
  $('#firstBreak').textContent=minsToTime(shiftMinute(90));
  $('#nextRotation').textContent=minsToTime(shiftMinute(ROTATIONS[0]));
  $('#shiftStatus').textContent=state.started?'In progress':'Preparation';
  $('#startBtn').innerHTML=state.started?'Rebuild plan <span>↻</span>':'Start shift <span>→</span>';
  $('#progressText').textContent=state.started?'Automatic rotation enabled':'Initial placement at '+minsToTime(shiftMinute(-5));
  $('#progressBar').style.width=state.started?'18%':'0';
- renderLineSwitches();renderExtraPool();renderWTPool();renderLines();renderMovementPlan();renderScheduleGrid();renderTimeline();renderTeam();save();
+ renderLineSwitches();renderExtraPool();renderWTPool();renderLines();renderMovementPlan();renderScheduleGrid();renderTimeline();renderTeam();renderAttendance();save();
 }
 function renderLineSwitches(){
  $('#lineSwitches').innerHTML=WORK_AREAS.map(area=>`<button data-area-toggle="${area.id}" class="${state.disabledLines.includes(area.id)?'off':'on'}"><i></i>${area.label}<small>${state.disabledLines.includes(area.id)?'Not operating':'Operating'}</small></button>`).join('');
@@ -132,7 +135,7 @@ function shortPositionName(pos){return pos.replace(/^Line \d+ · /,'')}
 function lineRequirement(id){if(id==='AP')return '1 AP';if(id==='MP')return '1 Palletizer';return ['1','2','3','5','6'].includes(id)?'1–3 Packer · 1 Palletizer':'1 Packer'}
 function renderLines(){
  const pairings=getNewPairings();
- const peopleOptions=(selected,skill)=>'<option value="">— Not required —</option>'+state.people.map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''} ${p.skills.includes('WT')?'disabled':''}>${esc(p.name)}${p.skills.includes('WT')?' · WT breaks only':skill!=='Any'&&!p.skills.includes(skill)?' · missing skill':''}</option>`).join('');
+ const peopleOptions=(selected,skill)=>'<option value="">— Not required —</option>'+presentPeople().map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''} ${p.skills.includes('WT')?'disabled':''}>${esc(p.name)}${p.skills.includes('WT')?' · WT breaks only':skill!=='Any'&&!p.skills.includes(skill)?' · missing skill':''}</option>`).join('');
  const positionRow=([pos,skill,optional],i)=>{const assigned=personById(state.assignments[pos]),isNew=assigned?.skills.includes('NEW'),pair=pairings.get(pos);const notRequired=!assigned&&state.notRequiredPositions.includes(pos);const tag=isDisabled(pos)?'Not operating':notRequired?'Not required':PRODUCT_LINES.includes(pos)&&isNew?(pair?`NEW + ${esc(pair.person.name)}`:'NEW · Extra required'):PRODUCT_LINES.includes(pos)?'↔ 60 min':skill;return `<div class="position ${PRODUCT_LINES.includes(pos)?'product-line':''} ${isDisabled(pos)?'disabled-position':''} ${PRODUCT_LINES.includes(pos)&&isNew?'new-product-position':''}"><span class="position-icon">${i+1}</span><div><label>${esc(shortPositionName(pos))}${optional?' · optional':''}${isNew?'<mark>NEW</mark>':''}</label><select data-position="${esc(pos)}" ${isDisabled(pos)?'disabled':''}>${peopleOptions(state.assignments[pos],skill)}</select></div><span class="skill-tag ${PRODUCT_LINES.includes(pos)&&isNew?(pair?'paired':'missing'):''}">${tag}</span></div>`};
  const groupedPositions=group=>{
    const lineGroups=WORK_AREAS.map(area=>({...area,items:group.items.filter(item=>positionArea(item[0])===area.id)})).filter(x=>x.items.length);
@@ -243,7 +246,7 @@ function renderScheduleGrid(){
  const buildBreakCoverage=column=>{
    const displayAssignments={...column.assignments},entries=[],companionOverrides=new Map();
    if(!breakOffsets.has(column.offset))return {assignments:displayAssignments,entries,companionOverrides};
-   const breakPeople=state.people.filter(person=>breakByPerson.get(person.name)?.has(column.offset));
+   const breakPeople=presentPeople().filter(person=>breakByPerson.get(person.name)?.has(column.offset));
    const breakIds=new Set(breakPeople.map(person=>person.id));
    const positionById=new Map(Object.entries(column.assignments).filter(([,id])=>id).map(([pos,id])=>[id,pos]));
    const companionPositionById=new Map([...getNewPairings(column.assignments).entries()].filter(([,extra])=>extra).map(([pos,extra])=>[extra.person.id,pos]));
@@ -296,7 +299,7 @@ function renderScheduleGrid(){
  };
  const extraCell=column=>{if(breakOffsets.has(column.offset))return '<span class="sheet-on-break">All Extra staff → covering breaks</span>';const source=column.originalAssignments||column.assignments,companions=getNewCompanionIds(source),extras=getExtraPool(source).filter(item=>!companions.has(item.person.id));return extras.length?extras.map(item=>`${esc(item.person.name)} <span class="sheet-role">(${esc(item.position)})</span>`).join(' + '):'—'};
  const coverageCell=column=>column.coverage?.entries.length?column.coverage.entries.map(entry=>entry.noCoverNeeded?`${esc(entry.breaker.name)} <span class="sheet-role">(BREAK · ${entry.target==='EXTRA'?'from Extra':'position left open'})</span>`:entry.cover?`<b>${esc(entry.cover.person.name)}</b> <span class="sheet-role">(${esc(entry.coverType)})</span> → ${esc(entry.breaker.name)} · ${esc(sheetPositionLabel(entry.target))}${entry.companionTarget?' · NEW support':''}`:`<b>NO COVER</b> → ${esc(entry.breaker.name)} · ${esc(sheetPositionLabel(entry.target))}${entry.companionTarget?' · NEW support':''}`).join('<br>'):'—';
- const breakCell=column=>{const source=column.originalAssignments||column.assignments,companionPositions=new Map([...getNewPairings(source).entries()].filter(([,extra])=>extra).map(([pos,extra])=>[extra.person.id,pos]));const names=state.people.filter(person=>breakByPerson.get(person.name)?.has(column.offset)).map(person=>{const assignedPos=Object.keys(source).find(key=>source[key]===person.id),companionPos=companionPositions.get(person.id),pos=assignedPos||companionPos;return `${esc(person.name)}${pos?` <span class="sheet-role">(${esc(sheetPositionLabel(pos))}${companionPos&&!assignedPos?' · NEW support':''})</span>`:''}`});return names.length?names.join(' + '):'—'};
+ const breakCell=column=>{const source=column.originalAssignments||column.assignments,companionPositions=new Map([...getNewPairings(source).entries()].filter(([,extra])=>extra).map(([pos,extra])=>[extra.person.id,pos]));const names=presentPeople().filter(person=>breakByPerson.get(person.name)?.has(column.offset)).map(person=>{const assignedPos=Object.keys(source).find(key=>source[key]===person.id),companionPos=companionPositions.get(person.id),pos=assignedPos||companionPos;return `${esc(person.name)}${pos?` <span class="sheet-role">(${esc(sheetPositionLabel(pos))}${companionPos&&!assignedPos?' · NEW support':''})</span>`:''}`});return names.length?names.join(' + '):'—'};
  const rowsByGroup=[
    {group:'F1',rows:[...['1','2','3','4'].map(line=>({label:`Line ${line}`,cell:column=>lineCell(line,column)})),{label:'AP',cell:column=>state.disabledLines.includes('AP')?'<span class="sheet-off">Not operating</span>':apCell(column)},{label:'MP',cell:column=>state.disabledLines.includes('MP')?'<span class="sheet-off">Not operating</span>':positionCell('MP',column,'MP')},{label:'W1',cell:column=>positionCell('W1',column,'W1')}]},
    {group:'F2',rows:[...['5','6','7','8'].map(line=>({label:`Line ${line}`,cell:column=>lineCell(line,column)})),{label:'W2',cell:column=>positionCell('W2 · palletiser',column,'W2')}]},
@@ -307,7 +310,7 @@ function renderScheduleGrid(){
  $('#planSheet').innerHTML=`<div class="sheet-meta"><div><small>SHIFT PLAN</small><b>${esc(TEAMS[state.team])}</b></div><div><small>SHIFT</small><b>${esc(SHIFTS[state.shift].name)}</b></div><div><small>DATE</small><b>${esc(date)}</b></div></div><div class="sheet-scroll"><table><thead><tr><th>Line / position</th>${columns.map(column=>`<th class="${column.offset>0&&column.offset%120===0?'sheet-cross':''}">${esc(minsToTime(shiftMinute(column.offset<0?0:column.offset)))}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 function breakNames(columns=scheduleSnapshots()){
- const people=state.people.filter(person=>!person.skills.includes('WT'));
+ const people=presentPeople().filter(person=>!person.skills.includes('WT'));
  const coordinatorId=state.assignments['Shift coordinator'];
  const groupSizes=[Math.floor(people.length/3),Math.floor(people.length/3),Math.floor(people.length/3)];
  for(let i=0;i<people.length%3;i++)groupSizes[2-i]++;
@@ -343,9 +346,27 @@ function renderTimeline(){
 }
 function renderTeam(){
  $('#skillPicks').innerHTML=SKILLS.map(s=>`<label><input type="checkbox" value="${s}">${s}</label>`).join('');
- $('#teamList').innerHTML=state.people.map(p=>`<div class="team-person"><span class="avatar">${initials(p.name)}</span><div><b>${esc(p.name)}</b><div class="person-skill-grid">${SKILLS.map(skill=>`<button type="button" data-person-skill="${p.id}" data-skill="${skill}" class="${p.skills.includes(skill)?'active':''}">${skill}</button>`).join('')}</div></div><button class="delete" data-delete="${p.id}">Delete</button></div>`).join('');
+ $('#teamList').innerHTML=state.people.map(p=>`<div class="team-person ${isPresent(p)?'':'person-absent'}"><span class="avatar">${initials(p.name)}</span><div><b>${esc(p.name)}</b><small class="attendance-mini">${isPresent(p)?'Present':'Absent'}</small><div class="person-skill-grid">${SKILLS.map(skill=>`<button type="button" data-person-skill="${p.id}" data-skill="${skill}" class="${p.skills.includes(skill)?'active':''}">${skill}</button>`).join('')}</div></div><button class="delete" data-delete="${p.id}">Delete</button></div>`).join('');
  $$('[data-person-skill]').forEach(b=>b.onclick=()=>{const p=state.people.find(p=>p.id===b.dataset.personSkill);const skill=b.dataset.skill;p.skills=p.skills.includes(skill)?p.skills.filter(s=>s!==skill):[...p.skills,skill];render()});
  $$('[data-delete]').forEach(b=>b.onclick=()=>{const id=b.dataset.delete;state.people=state.people.filter(p=>p.id!==id);Object.keys(state.assignments).forEach(k=>{if(state.assignments[k]===id)delete state.assignments[k]});render()});
+}
+function renderAttendance(){
+ syncActiveTeam();
+ const entries=Object.keys(TEAMS).map(team=>({team,label:TEAMS[team],people:state.teamData?.[team]?.people||[]}));
+ const all=entries.flatMap(entry=>entry.people),present=all.filter(isPresent).length,absent=all.length-present;
+ $('#attendanceSummary').innerHTML=`<article><small>TOTAL WORKERS</small><strong>${all.length}</strong></article><article class="present"><small>PRESENT</small><strong>${present}</strong></article><article class="absent"><small>ABSENT</small><strong>${absent}</strong></article>`;
+ $('#attendanceTeams').innerHTML=entries.map(({team,label,people})=>{
+  const here=people.filter(isPresent).length;
+  return `<article class="attendance-team"><header><div><i class="team-dot ${team}"></i><div><h2>${esc(label)}</h2><p>${here} Present · ${people.length-here} Absent · ${people.length} total</p></div></div><div><button class="ghost small" data-mark-team="${team}" type="button">Mark all Present</button><button class="ghost small" data-add-team="${team}" type="button">+ Add</button></div></header><div class="attendance-list">${people.length?people.map(person=>`<div class="attendance-person ${isPresent(person)?'is-present':'is-absent'}"><span class="avatar">${initials(person.name)}</span><div class="attendance-person-info"><b>${esc(person.name)}</b><small>${person.skills.length?person.skills.map(esc).join(' · '):'No skills selected'}</small></div><div class="attendance-toggle" role="group" aria-label="Status for ${esc(person.name)}"><button type="button" data-attendance-team="${team}" data-attendance-person="${person.id}" data-attendance-status="present" class="${isPresent(person)?'active':''}">Present</button><button type="button" data-attendance-team="${team}" data-attendance-person="${person.id}" data-attendance-status="absent" class="${isPresent(person)?'':'active'}">Absent</button></div></div>`).join(''):'<p class="attendance-empty">No workers have been added to this team yet.</p>'}</div></article>`;
+ }).join('');
+ $$('[data-attendance-person]').forEach(button=>button.onclick=()=>{
+  syncActiveTeam();const team=button.dataset.attendanceTeam,data=state.teamData[team]||emptyTeamData(),person=data.people.find(item=>item.id===button.dataset.attendancePerson);if(!person)return;
+  person.present=button.dataset.attendanceStatus==='present';
+  if(!person.present)Object.keys(data.assignments||{}).forEach(pos=>{if(data.assignments[pos]===person.id)delete data.assignments[pos]});
+  if(team===state.team)applyTeamData(data);render();toast(`${person.name}: ${person.present?'Present':'Absent'}`);
+ });
+ $$('[data-mark-team]').forEach(button=>button.onclick=()=>{syncActiveTeam();const data=state.teamData[button.dataset.markTeam]||emptyTeamData();data.people.forEach(person=>person.present=true);if(button.dataset.markTeam===state.team)applyTeamData(data);render();toast(TEAMS[button.dataset.markTeam]+': all Present')});
+ $$('[data-add-team]').forEach(button=>button.onclick=()=>{const next=button.dataset.addTeam;if(next!==state.team){syncActiveTeam();state.team=next;applyTeamData(state.teamData[next]||emptyTeamData())}render();$('#teamDialog').showModal()});
 }
 function skillFromText(value){
  const v=String(value||'').trim().toLowerCase().replace(/[-_]/g,' ');
@@ -371,15 +392,18 @@ function parseExcelPeople(text){
 }
 function updateExcelPreview(){const people=parseExcelPeople($('#excelPaste').value);$('#importExcelBtn').disabled=!people.length;$('#excelHint').textContent=people.length?`Employees recognised: ${people.length}`:'Supported columns: Palletizer, Packer, AP, WT, W1, W2, SC, NEW, Stacker trained'}
 function updateClock(){const n=new Date();$('#clock').textContent=n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});$('#todayLabel').textContent=n.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}).toUpperCase()}
+function showView(view){const attendance=view==='workers';$('#dashboardView').classList.toggle('hidden',attendance);$('#attendanceView').classList.toggle('hidden',!attendance);$('#todayBtn').classList.toggle('nav-active',!attendance);$('#workersBtn').classList.toggle('nav-active',attendance);document.body.classList.toggle('attendance-open',attendance);if(attendance)renderAttendance();window.scrollTo({top:0,behavior:'smooth'})}
 $$('.shift').forEach(b=>b.onclick=()=>{state.shift=b.dataset.shift;state.started=false;render()});
 $$('[data-team]').forEach(b=>b.onclick=()=>{const next=b.dataset.team;if(next===state.team)return;syncActiveTeam();state.team=next;applyTeamData(state.teamData[next]||emptyTeamData());render();toast('Team: '+TEAMS[state.team])});
 $('#startBtn').onclick=()=>{assignInitial();state.started=true;render();toast('Shift plan is ready')};
-$('#addPersonBtn').onclick=$('#teamBtn').onclick=()=>$('#teamDialog').showModal();
-$('#scheduleBtn').onclick=()=>$('#timelineSection').scrollIntoView({behavior:'smooth'});
+$('#addPersonBtn').onclick=()=>$('#teamDialog').showModal();
+$('#todayBtn').onclick=$('#backToPlanBtn').onclick=()=>showView('today');
+$('#workersBtn').onclick=()=>showView('workers');
+$('#scheduleBtn').onclick=()=>{showView('today');setTimeout(()=>$('#timelineSection').scrollIntoView({behavior:'smooth'}),220)};
 $$('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
-$('#personForm').onsubmit=e=>{e.preventDefault();const name=$('#personName').value.trim();const skills=$$('#skillPicks input:checked').map(x=>x.value);state.people.push({id:'p'+Date.now(),name,skills});e.target.reset();render();toast(name+' added')};
+$('#personForm').onsubmit=e=>{e.preventDefault();const name=$('#personName').value.trim();const skills=$$('#skillPicks input:checked').map(x=>x.value);state.people.push({id:'p'+Date.now(),name,skills,present:true});e.target.reset();render();toast(name+' added')};
 $('#excelPaste').oninput=updateExcelPreview;
-$('#importExcelBtn').onclick=()=>{const incoming=parseExcelPeople($('#excelPaste').value);let added=0,updated=0;incoming.forEach((person,i)=>{const existing=state.people.find(p=>p.name.trim().toLowerCase()===person.name.toLowerCase());if(existing){const merged=[...new Set([...existing.skills,...person.skills])];if(merged.length!==existing.skills.length){existing.skills=merged;updated++}}else{state.people.push({id:'p'+Date.now()+'-'+i,name:person.name,skills:person.skills});added++}});$('#excelPaste').value='';updateExcelPreview();render();toast(`Imported: ${added} new${updated?', '+updated+' updated':''}`)};
+$('#importExcelBtn').onclick=()=>{const incoming=parseExcelPeople($('#excelPaste').value);let added=0,updated=0;incoming.forEach((person,i)=>{const existing=state.people.find(p=>p.name.trim().toLowerCase()===person.name.toLowerCase());if(existing){const merged=[...new Set([...existing.skills,...person.skills])];if(merged.length!==existing.skills.length){existing.skills=merged;updated++}}else{state.people.push({id:'p'+Date.now()+'-'+i,name:person.name,skills:person.skills,present:true});added++}});$('#excelPaste').value='';updateExcelPreview();render();toast(`Imported: ${added} new${updated?', '+updated+' updated':''}`)};
 $('#resetBtn').onclick=()=>{const warning=cloud.active?'Reset the shared employee list and plan for ALL users?':'Reset employees and the plan to the demo version?';if(confirm(warning)){localStorage.removeItem(LOCAL_KEY);state=normalizeState(freshState());render();if(cloud.active)pushCloudState();else location.reload()}};
 $('#exportBtn').onclick=async()=>{const text=$$('.event').map(e=>e.innerText.replace(/\n/g,' — ')).join('\n');await navigator.clipboard.writeText(text);toast('Plan copied')};
 function printPlan(){document.body.classList.add('printing-plan');window.print()}
