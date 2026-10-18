@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f4f5ef">
+  <title>Lineflow — Shift Management</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#"><span class="brand-mark">LF</span><span>lineflow</span></a>
+    <nav><button class="nav-active">Today</button><button id="teamBtn">Team</button><button id="scheduleBtn">Schedule</button></nav>
+    <button class="icon-btn" id="resetBtn" aria-label="Reset data">↻</button>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow" id="todayLabel"></p>
+        <h1>Shift Management</h1>
+        <p class="subtitle">People rotation and breaks in one clear workflow.</p>
+      </div>
+      <div class="clock-card"><span>Now</span><strong id="clock">--:--</strong><small>Europe / London</small></div>
+    </section>
+
+    <section class="shift-picker" aria-label="Shift selection">
+      <button data-shift="morning" class="shift active"><span class="shift-icon sun">☀</span><b>Morning</b><small>06:00 — 14:00</small><i></i></button>
+      <button data-shift="afternoon" class="shift"><span class="shift-icon dusk">◐</span><b>Afternoon</b><small>14:00 — 22:00</small><i></i></button>
+      <button data-shift="night" class="shift"><span class="shift-icon night">☾</span><b>Night</b><small>22:00 — 06:00</small><i></i></button>
+    </section>
+
+    <section class="crew-picker-section" aria-label="Team selection">
+      <p class="eyebrow">SELECT TEAM</p>
+      <div class="crew-picker">
+        <button data-team="red"><i></i><b>RED</b><small data-team-count="red">0 people</small></button>
+        <button data-team="blue"><i></i><b>BLUE</b><small data-team-count="blue">0 people</small></button>
+        <button data-team="green"><i></i><b>GREEN</b><small data-team-count="green">0 people</small></button>
+        <button data-team="weekendMorning"><i></i><b>Weekend Morning</b><small data-team-count="weekendMorning">0 people</small></button>
+        <button data-team="weekendNight"><i></i><b>Weekend Night</b><small data-team-count="weekendNight">0 people</small></button>
+      </div>
+    </section>
+
+    <section class="status-strip">
+      <div><span class="pulse"></span><p><small>SHIFT STATUS</small><b id="shiftStatus">Preparation</b></p></div>
+      <div class="progress-wrap"><span id="progressText">Initial placement at 05:55</span><div class="progress"><i id="progressBar"></i></div></div>
+      <button class="primary" id="startBtn">Start shift <span>→</span></button>
+    </section>
+
+    <section class="summary-grid">
+      <article class="summary people"><span class="summary-icon">♙</span><div><small>PEOPLE ON SHIFT</small><strong id="peopleCount">0</strong><p id="trainedCount">0 multi-skilled</p></div><button id="addPersonBtn">+</button></article>
+      <article class="summary next"><span class="summary-icon">↻</span><div><small>NEXT ROTATION</small><strong id="nextRotation">07:00</strong><p id="rotationHint">in —</p></div></article>
+      <article class="summary break"><span class="summary-icon">☕</span><div><small>FIRST BREAK</small><strong id="firstBreak">07:30</strong><p>1 hour 30 minute window</p></div></article>
+    </section>
+
+    <section class="section-head">
+      <div><p class="eyebrow">PLACEMENT</p><h2>Lines right now</h2></div>
+      <div class="legend"><span><i class="dot working"></i>On position</span><span><i class="dot soon"></i>Rotation soon</span><span><i class="dot onbreak"></i>On break</span></div>
+    </section>
+    <div class="line-switches" id="lineSwitches" aria-label="Operating lines"></div>
+    <aside class="product-rule"><span>60</span><div><b>Same product group: Line 4 · Line 7 · Line 8</b><p>Direct moves between these lines are not allowed. A person must spend at least 1 hour on another position before returning to any of them.</p></div></aside>
+    <aside class="product-rule hot-rule"><span>HOT</span><div><b>Hot lines: Line 1 · Line 6</b><p>Direct moves between them are not allowed. Before moving to the other hot line, a person must spend 30–60 minutes on a cold line or another position.</p></div></aside>
+    <aside class="product-rule cross-rule"><span>2H</span><div><b>Movement between F1 and F2</b><p>Every 2 hours the program first looks for a suitable position in the other area. If skills or rules do not allow it, the employee safely continues rotating within the current area.</p></div></aside>
+    <aside class="product-rule ap-rule"><span>AP</span><div><b>AP stays assigned for the full shift</b><p>The AP employee does not join normal rotation. WT covers AP only during the two breaks.</p></div></aside>
+    <section class="extra-panel" id="extraPool" aria-label="Extra staff list"></section>
+    <section class="wt-panel" id="wtPool" aria-label="WT break reserve"></section>
+    <section class="lines" id="lines"></section>
+
+    <section class="movement-section">
+      <div class="section-head"><div><p class="eyebrow">NEXT ROTATION</p><h2>Who replaces whom</h2></div><strong class="movement-time" id="movementTime">—</strong></div>
+      <p class="movement-intro">Shows every person's next position and where the employee they replace will go next.</p>
+      <div class="movement-plan" id="movementPlan"></div>
+    </section>
+
+    <section class="plan-sheet-section" id="planSheetSection">
+      <div class="section-head"><div><p class="eyebrow">PRINTABLE PLAN</p><h2>Full shift table</h2></div><button class="ghost" id="printPlanBtn" type="button">Print table</button></div>
+      <p class="movement-intro">Lines are shown in rows and times in columns. Each cell lists the Packers and Palletiser; breaks, Extra staff and WT are shown separately.</p>
+      <div class="plan-sheet" id="planSheet"></div>
+    </section>
+
+    <section class="timeline-section" id="timelineSection">
+      <div class="section-head"><div><p class="eyebrow">SHIFT PLAN</p><h2>Rotations and breaks</h2></div><button class="ghost" id="exportBtn">Copy plan</button></div>
+      <div class="timeline" id="timeline"></div>
+    </section>
+  </main>
+
+  <dialog id="teamDialog">
+    <div class="dialog-head"><div><p class="eyebrow">TEAM</p><h2>Employees and skills</h2><p class="dialog-team" id="teamDialogTeam"></p></div><button class="icon-btn" data-close>×</button></div>
+    <form id="personForm" class="person-form">
+      <input id="personName" placeholder="Employee name" required maxlength="40">
+      <div class="skill-picks" id="skillPicks"></div>
+      <button class="primary" type="submit">Add</button>
+    </form>
+    <details class="excel-import">
+      <summary>Paste a list from Excel <span>⌘V</span></summary>
+      <p>Copy a column of names or a table with skill headers and paste it below.</p>
+      <textarea id="excelPaste" rows="5" placeholder="Name&#9;Packer&#9;SC&#9;NEW&#10;Anna&#9;Yes&#9;&#9;Yes&#10;Mark&#9;Yes&#9;Yes&#9;"></textarea>
+      <div><small id="excelHint">Supported columns: Palletizer, Packer, AP, WT, W1, W2, SC, NEW, Stacker trained</small><button class="primary" id="importExcelBtn" type="button" disabled>Import</button></div>
+    </details>
+    <div class="team-list" id="teamList"></div>
+  </dialog>
+  <button class="floating-print" id="printPlanTopBtn" type="button"><span>🖨</span> Print plan</button>
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
+
