@@ -2,7 +2,17 @@
 
 English GitHub Pages version of the Lineflow shift rotation planner.
 
-The application runs entirely in the browser and stores team lists, skills, line status and shift plans in that browser's local storage.
+The application can run as a local-only GitHub Pages site or as a shared Render application backed by PostgreSQL. The browser keeps a local fallback copy so temporary connection loss does not stop the shift plan.
+
+## Shared Render deployment
+
+1. In Render, select **New → Blueprint** and connect this repository.
+2. Render reads `render.yaml` and creates the web service plus PostgreSQL database.
+3. Enter a private `APP_PASSWORD` when prompted.
+4. After deployment, open the generated `onrender.com` address.
+5. Sign in with username `lineflow` and the password entered in Render.
+
+Everyone using the Render address shares the same teams, skills, line status and shift plan. The GitHub Pages address remains local-only. Never commit the application password or database URL to GitHub.
 
 ## GitHub Pages
 
