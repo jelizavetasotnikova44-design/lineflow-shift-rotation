@@ -19,6 +19,7 @@ services:
 
 databases:
   - name: lineflow-database
+    # Safe for testing. Upgrade in Render before day 30 for permanent storage.
     plan: free
     region: frankfurt
     databaseName: lineflow
