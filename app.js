@@ -7,8 +7,8 @@ const HOT_LINE_AREAS=['1','6'];
 const WORK_AREAS=[...Array.from({length:8},(_,i)=>({id:String(i+1),label:`Line ${i+1}`})),{id:'AP',label:'AP'},{id:'MP',label:'MP'}];
 const FLEX_LINE=(n)=>[[`Line ${n} · Packer 1`,'Packer'],[`Line ${n} · Packer 2`,'Packer',true],[`Line ${n} · Packer 3`,'Packer',true],[`Line ${n} · Palletiser`,'Palletizer']];
 const POSITIONS=[
- {line:'F1',items:[...FLEX_LINE(1),...FLEX_LINE(2),...FLEX_LINE(3),['Line 4 · Packer','Packer'],['AP','AP'],['MP','Palletizer'],['W1','W1']]},
- {line:'F2',items:[...FLEX_LINE(5),...FLEX_LINE(6),['Line 7 · Packer','Packer'],['Line 8 · Packer','Packer'],['W2 · palletiser','W2']]},
+ {line:'F1',items:[...FLEX_LINE(1),...FLEX_LINE(2),...FLEX_LINE(3),['Line 4 · Packer','Urinal lines'],['AP','AP'],['MP','Palletizer'],['W1','W1']]},
+ {line:'F2',items:[...FLEX_LINE(5),...FLEX_LINE(6),['Line 7 · Packer','Urinal lines'],['Line 8 · Packer','Urinal lines'],['W2 · palletiser','W2']]},
  {line:'Support',items:[['Shift coordinator','SC'],['Extra 1','Any',true],['Extra 2','Any',true]]}
 ];
 const defaultPeople=[
@@ -105,6 +105,7 @@ function render(){
  normalizeWTAssignments();
  Object.keys(state.assignments).forEach(pos=>{if(!isPresent(personById(state.assignments[pos])))delete state.assignments[pos]});
  Object.keys(state.assignments).forEach(pos=>{const person=personById(state.assignments[pos]);if(person?.skills.includes('SC')&&pos!=='Shift coordinator')delete state.assignments[pos]});
+ Object.keys(state.assignments).forEach(pos=>{const person=personById(state.assignments[pos]);if(PRODUCT_LINES.includes(pos)&&person&&!person.skills.includes('Urinal lines')&&!person.skills.includes('NEW'))delete state.assignments[pos]});
  const cfg=SHIFTS[state.shift];
  $$('.shift').forEach(b=>b.classList.toggle('active',b.dataset.shift===state.shift));
  $$('[data-team]').forEach(b=>{const active=b.dataset.team===state.team;b.classList.toggle('active',active);b.setAttribute('aria-pressed',String(active))});
@@ -133,11 +134,11 @@ function renderWTPool(){
  const people=getWTPool();$('#wtPool').innerHTML=`<div class="wt-icon">WT</div><div><p class="eyebrow">SEPARATE RESERVE</p><h3>WT — break cover only</h3><p>WT does not join normal rotation and is not counted as Extra.</p><div class="wt-chips">${people.length?people.map(person=>`<span>${esc(person.name)}</span>`).join(''):'<em>No employee has the WT skill</em>'}</div></div><strong>${people.length}</strong>`;
 }
 function shortPositionName(pos){return pos.replace(/^Line \d+ · /,'')}
-function lineRequirement(id){if(id==='AP')return '1 AP';if(id==='MP')return '1 Palletizer';return ['1','2','3','5','6'].includes(id)?'1–3 Packer · 1 Palletizer':'1 Packer'}
+function lineRequirement(id){if(id==='AP')return '1 AP';if(id==='MP')return '1 Palletizer';return ['1','2','3','5','6'].includes(id)?'1–3 Packer · 1 Palletizer':'1 Packer · Urinal lines'}
 function renderLines(){
  const pairings=getNewPairings();
- const peopleOptions=(selected,skill,pos)=>'<option value="">— Not required —</option>'+presentPeople().map(p=>{const scRestricted=p.skills.includes('SC')&&pos!=='Shift coordinator',scRequired=pos==='Shift coordinator'&&!p.skills.includes('SC'),disabled=p.skills.includes('WT')||scRestricted||scRequired;const note=p.skills.includes('WT')?' · WT breaks only':scRestricted?' · SC: F1 breaks only':scRequired?' · SC skill required':skill!=='Any'&&!p.skills.includes(skill)?' · missing skill':'';return `<option value="${p.id}" ${p.id===selected?'selected':''} ${disabled?'disabled':''}>${esc(p.name)}${note}</option>`}).join('');
- const positionRow=([pos,skill,optional],i)=>{const assigned=personById(state.assignments[pos]),isNew=assigned?.skills.includes('NEW'),pair=pairings.get(pos);const notRequired=!assigned&&state.notRequiredPositions.includes(pos);const tag=isDisabled(pos)?'Not operating':notRequired?'Not required':PRODUCT_LINES.includes(pos)&&isNew?(pair?`NEW + ${esc(pair.person.name)}`:'NEW · Extra required'):PRODUCT_LINES.includes(pos)?'↔ 60 min':skill;return `<div class="position ${PRODUCT_LINES.includes(pos)?'product-line':''} ${isDisabled(pos)?'disabled-position':''} ${PRODUCT_LINES.includes(pos)&&isNew?'new-product-position':''}"><span class="position-icon">${i+1}</span><div><label>${esc(shortPositionName(pos))}${optional?' · optional':''}${isNew?'<mark>NEW</mark>':''}</label><select data-position="${esc(pos)}" ${isDisabled(pos)?'disabled':''}>${peopleOptions(state.assignments[pos],skill,pos)}</select></div><span class="skill-tag ${PRODUCT_LINES.includes(pos)&&isNew?(pair?'paired':'missing'):''}">${tag}</span></div>`};
+ const peopleOptions=(selected,skill,pos)=>'<option value="">— Not required —</option>'+presentPeople().map(p=>{const scRestricted=p.skills.includes('SC')&&pos!=='Shift coordinator',scRequired=pos==='Shift coordinator'&&!p.skills.includes('SC'),urinalRestricted=PRODUCT_LINES.includes(pos)&&!p.skills.includes('Urinal lines')&&!p.skills.includes('NEW'),disabled=p.skills.includes('WT')||scRestricted||scRequired||urinalRestricted;const note=p.skills.includes('WT')?' · WT breaks only':scRestricted?' · SC: F1 breaks only':scRequired?' · SC skill required':urinalRestricted?' · Urinal lines skill required':skill!=='Any'&&!p.skills.includes(skill)?' · missing skill':'';return `<option value="${p.id}" ${p.id===selected?'selected':''} ${disabled?'disabled':''}>${esc(p.name)}${note}</option>`}).join('');
+ const positionRow=([pos,skill,optional],i)=>{const assigned=personById(state.assignments[pos]),isNew=assigned?.skills.includes('NEW'),pair=pairings.get(pos);const notRequired=!assigned&&state.notRequiredPositions.includes(pos);const tag=isDisabled(pos)?'Not operating':notRequired?'Not required':PRODUCT_LINES.includes(pos)&&isNew?(pair?`NEW + ${esc(pair.person.name)}`:'NEW · Extra required'):PRODUCT_LINES.includes(pos)?'Urinal lines · ↔ 60 min':skill;return `<div class="position ${PRODUCT_LINES.includes(pos)?'product-line':''} ${isDisabled(pos)?'disabled-position':''} ${PRODUCT_LINES.includes(pos)&&isNew?'new-product-position':''}"><span class="position-icon">${i+1}</span><div><label>${esc(shortPositionName(pos))}${optional?' · optional':''}${isNew?'<mark>NEW</mark>':''}</label><select data-position="${esc(pos)}" ${isDisabled(pos)?'disabled':''}>${peopleOptions(state.assignments[pos],skill,pos)}</select></div><span class="skill-tag ${PRODUCT_LINES.includes(pos)&&isNew?(pair?'paired':'missing'):''}">${tag}</span></div>`};
  const groupedPositions=group=>{
    const lineGroups=WORK_AREAS.map(area=>({...area,items:group.items.filter(item=>positionArea(item[0])===area.id)})).filter(x=>x.items.length);
    const other=group.items.filter(item=>!positionArea(item[0]));
@@ -151,6 +152,7 @@ function renderLines(){
    const occupied=Object.keys(state.assignments).find(pos=>state.assignments[pos]===nextId&&pos!==target);
    if(nextId&&personById(nextId)?.skills.includes('SC')&&target!=='Shift coordinator'){e.target.value=previousId;toast('SC remains in F1 and is used only for break cover');return}
    if(nextId&&target==='Shift coordinator'&&!personById(nextId)?.skills.includes('SC')){e.target.value=previousId;toast('Shift coordinator requires the SC skill');return}
+   if(nextId&&PRODUCT_LINES.includes(target)&&!personById(nextId)?.skills.includes('Urinal lines')&&!personById(nextId)?.skills.includes('NEW')){e.target.value=previousId;toast('Line 4, 7 and 8 require the Urinal lines skill');return}
    if(nextId&&occupied&&hotTransitionBlocked(occupied,target)){e.target.value=previousId;toast('Direct moves between Line 1 and Line 6 are not allowed');return}
    const hotPause=state.hotCooldowns[nextId];
    if(nextId&&isHotPosition(target)&&hotPause?.until>Date.now()&&hotPause.fromArea!==positionArea(target)){const left=Math.ceil((hotPause.until-Date.now())/60000);e.target.value=previousId;toast(left+' more minutes on a cold position before the other hot line');return}
@@ -262,7 +264,7 @@ function renderScheduleGrid(){
      const skill=positionItem(target)?.[1]||'Any';
      return extras.find(item=>!usedCoverIds.has(item.person.id)&&(skill==='Any'||item.person.skills.includes(skill))&&(!PRODUCT_LINES.includes(target)||!item.person.skills.includes('NEW')))||null;
    };
-   const takePalletiser=()=>palletiserSources.find(item=>!usedCoverIds.has(item.person.id))||null;
+   const takePalletiser=target=>palletiserSources.find(item=>!usedCoverIds.has(item.person.id)&&(!PRODUCT_LINES.includes(target)||item.person.skills.includes('Urinal lines')))||null;
    breakPeople.forEach(person=>{
      const companionTarget=companionPositionById.get(person.id)||'';
      const target=positionById.get(person.id)||companionTarget;
@@ -277,8 +279,8 @@ function renderScheduleGrid(){
      }else{
        const extra=takeExtra(target);
        if(extra)cover={person:extra.person,pos:extra.position},coverType='Extra';
-       if(!cover){const palletiser=takePalletiser();if(palletiser)cover=palletiser,coverType=palletiser.pos.startsWith('Line 1')?'Palletiser L1':'Palletiser L2'}
-       if(!cover&&positionFloor(target)==='F1'&&coordinator&&!breakIds.has(coordinator.id)&&coordinatorUses<2){coordinatorUses++;cover={person:coordinator,pos:'Shift coordinator'},coverType=`SC F1 ${coordinatorUses}/2`}
+       if(!cover){const palletiser=takePalletiser(target);if(palletiser)cover=palletiser,coverType=palletiser.pos.startsWith('Line 1')?'Palletiser L1':'Palletiser L2'}
+       if(!cover&&positionFloor(target)==='F1'&&coordinator&&!breakIds.has(coordinator.id)&&coordinatorUses<2&&(!PRODUCT_LINES.includes(target)||coordinator.skills.includes('Urinal lines'))){coordinatorUses++;cover={person:coordinator,pos:'Shift coordinator'},coverType=`SC F1 ${coordinatorUses}/2`}
      }
      if(companionTarget)companionOverrides.set(target,cover?.person||null);
      if(cover){usedCoverIds.add(cover.person.id);if(cover.pos&&cover.pos!==target&&!cover.pos.startsWith('Extra')&&cover.pos!=='WT'&&cover.pos!=='Shift coordinator')delete displayAssignments[cover.pos];if(!companionTarget)displayAssignments[target]=cover.person.id}
