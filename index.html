@@ -10,7 +10,7 @@
 <body>
   <header class="topbar">
     <a class="brand" href="#"><span class="brand-mark">LF</span><span>lineflow</span></a>
-    <nav><button class="nav-active" id="todayBtn">Today</button><button id="workersBtn">Workers</button><button id="scheduleBtn">Schedule</button></nav>
+    <nav><button class="nav-active" id="todayBtn">Today</button><button id="workersBtn">Workers</button><button id="trainingBtn">Training</button><button id="scheduleBtn">Schedule</button></nav>
     <span class="cloud-status local" id="cloudStatus" title="Storage status"><i></i><b>Local only</b></span>
     <button class="icon-btn" id="resetBtn" aria-label="Reset data">↻</button>
   </header>
@@ -95,18 +95,26 @@
     <section class="attendance-teams" id="attendanceTeams"></section>
   </main>
 
+  <main class="training-view hidden" id="trainingView">
+    <section class="attendance-hero">
+      <div><p class="eyebrow">SKILLS MATRIX</p><h1>Training</h1><p>All employees are grouped by team. Skills selected here are used for placement, rotation and break cover.</p></div>
+      <button class="ghost" id="backFromTrainingBtn" type="button">← Back to plan</button>
+    </section>
+    <section class="training-legend" id="trainingLegend"></section>
+    <section class="training-teams" id="trainingTeams"></section>
+  </main>
+
   <dialog id="teamDialog">
-    <div class="dialog-head"><div><p class="eyebrow">TEAM</p><h2>Employees and skills</h2><p class="dialog-team" id="teamDialogTeam"></p></div><button class="icon-btn" data-close>×</button></div>
+    <div class="dialog-head"><div><p class="eyebrow">TEAM</p><h2>Team employees</h2><p class="dialog-team" id="teamDialogTeam"></p><small>Skills are assigned in the Training tab.</small></div><button class="icon-btn" data-close>×</button></div>
     <form id="personForm" class="person-form">
       <input id="personName" placeholder="Employee name" required maxlength="40">
-      <div class="skill-picks" id="skillPicks"></div>
       <button class="primary" type="submit">Add</button>
     </form>
     <details class="excel-import">
       <summary>Paste a list from Excel <span>⌘V</span></summary>
-      <p>Copy a column of names or a table with skill headers and paste it below.</p>
-      <textarea id="excelPaste" rows="5" placeholder="Name&#9;Packer&#9;SC&#9;NEW&#10;Anna&#9;Yes&#9;&#9;Yes&#10;Mark&#9;Yes&#9;Yes&#9;"></textarea>
-      <div><small id="excelHint">Supported columns: Palletizer, Packer, AP, WT, W1, W2, SC, NEW, Stacker trained</small><button class="primary" id="importExcelBtn" type="button" disabled>Import</button></div>
+      <p>Copy a column of names. Assign skills in the Training tab after importing.</p>
+      <textarea id="excelPaste" rows="5" placeholder="Name&#10;Anna&#10;Mark"></textarea>
+      <div><small id="excelHint">Employee names are imported; skills are managed in Training.</small><button class="primary" id="importExcelBtn" type="button" disabled>Import</button></div>
     </details>
     <div class="team-list" id="teamList"></div>
   </dialog>
