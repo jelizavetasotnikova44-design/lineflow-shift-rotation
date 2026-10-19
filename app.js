@@ -119,7 +119,7 @@ function render(){
  $('#startBtn').innerHTML=state.started?'Rebuild plan <span>↻</span>':'Start shift <span>→</span>';
  $('#progressText').textContent=state.started?'Automatic rotation enabled':'Initial placement at '+minsToTime(shiftMinute(-5));
  $('#progressBar').style.width=state.started?'18%':'0';
- renderLineSwitches();renderExtraPool();renderWTPool();renderLines();renderMovementPlan();renderScheduleGrid();renderTimeline();renderTeam();renderAttendance();save();
+ renderLineSwitches();renderExtraPool();renderWTPool();renderLines();renderMovementPlan();renderScheduleGrid();renderTimeline();renderTeam();renderAttendance();renderTraining();save();
 }
 function renderLineSwitches(){
  $('#lineSwitches').innerHTML=WORK_AREAS.map(area=>`<button data-area-toggle="${area.id}" class="${state.disabledLines.includes(area.id)?'off':'on'}"><i></i>${area.label}<small>${state.disabledLines.includes(area.id)?'Not operating':'Operating'}</small></button>`).join('');
@@ -350,9 +350,7 @@ function renderTimeline(){
  $('#timeline').innerHTML=events.map(e=>`<div class="event ${e.type}-event"><time>${minsToTime(shiftMinute(e.m))}</time><i class="event-dot"></i><p>${e.title}<br><small>${esc(e.sub)}</small></p><small>${e.type==='break'?'30 minutes':e.type==='rotation'?'by skills':'manual'}</small></div>`).join('');
 }
 function renderTeam(){
- $('#skillPicks').innerHTML=SKILLS.map(s=>`<label><input type="checkbox" value="${s}">${s}</label>`).join('');
- $('#teamList').innerHTML=state.people.map(p=>`<div class="team-person ${isPresent(p)?'':'person-absent'}"><span class="avatar">${initials(p.name)}</span><div><b>${esc(p.name)}</b><small class="attendance-mini">${isPresent(p)?'Present':'Absent'}</small><div class="person-skill-grid">${SKILLS.map(skill=>`<button type="button" data-person-skill="${p.id}" data-skill="${skill}" class="${p.skills.includes(skill)?'active':''}">${skill}</button>`).join('')}</div></div><button class="delete" data-delete="${p.id}">Delete</button></div>`).join('');
- $$('[data-person-skill]').forEach(b=>b.onclick=()=>{const p=state.people.find(p=>p.id===b.dataset.personSkill);const skill=b.dataset.skill;p.skills=p.skills.includes(skill)?p.skills.filter(s=>s!==skill):[...p.skills,skill];render()});
+ $('#teamList').innerHTML=state.people.map(p=>`<div class="team-person ${isPresent(p)?'':'person-absent'}"><span class="avatar">${initials(p.name)}</span><div><b>${esc(p.name)}</b><small class="attendance-mini">${isPresent(p)?'Present':'Absent'} · ${p.skills.length} skills</small></div><button class="delete" data-delete="${p.id}">Delete</button></div>`).join('');
  $$('[data-delete]').forEach(b=>b.onclick=()=>{const id=b.dataset.delete;state.people=state.people.filter(p=>p.id!==id);Object.keys(state.assignments).forEach(k=>{if(state.assignments[k]===id)delete state.assignments[k]});render()});
 }
 function renderAttendance(){
@@ -372,6 +370,18 @@ function renderAttendance(){
  });
  $$('[data-mark-team]').forEach(button=>button.onclick=()=>{syncActiveTeam();const data=state.teamData[button.dataset.markTeam]||emptyTeamData();data.people.forEach(person=>person.present=true);if(button.dataset.markTeam===state.team)applyTeamData(data);render();toast(TEAMS[button.dataset.markTeam]+': all Present')});
  $$('[data-add-team]').forEach(button=>button.onclick=()=>{const next=button.dataset.addTeam;if(next!==state.team){syncActiveTeam();state.team=next;applyTeamData(state.teamData[next]||emptyTeamData())}render();$('#teamDialog').showModal()});
+}
+function renderTraining(){
+ syncActiveTeam();
+ const entries=Object.keys(TEAMS).map(team=>({team,label:TEAMS[team],people:state.teamData?.[team]?.people||[]}));
+ $('#trainingLegend').innerHTML=`<div><b>All available skills</b><span>${SKILLS.length}</span></div><div class="training-skill-list">${SKILLS.map(skill=>`<span>${esc(skill)}</span>`).join('')}</div>`;
+ $('#trainingTeams').innerHTML=entries.map(({team,label,people})=>`<article class="training-team"><header><div><i class="team-dot ${team}"></i><div><h2>${esc(label)}</h2><p>${people.length} employees</p></div></div><button class="ghost small" data-training-add="${team}" type="button">+ Add employee</button></header>${people.length?`<div class="training-table"><div class="training-row training-header"><b>Employee</b>${SKILLS.map(skill=>`<b title="${esc(skill)}">${esc(skill)}</b>`).join('')}</div>${people.map(person=>`<div class="training-row"><div class="training-person"><span class="avatar">${initials(person.name)}</span><span><b>${esc(person.name)}</b><small>${isPresent(person)?'Present':'Absent'}</small></span></div>${SKILLS.map(skill=>`<button type="button" data-training-team="${team}" data-training-person="${person.id}" data-training-skill="${skill}" class="${person.skills.includes(skill)?'active':''}" aria-pressed="${person.skills.includes(skill)}" aria-label="${esc(person.name)}: ${esc(skill)}"><span>✓</span></button>`).join('')}</div>`).join('')}</div>`:'<p class="attendance-empty">No workers have been added to this team yet.</p>'}</article>`).join('');
+ $$('[data-training-skill]').forEach(button=>button.onclick=()=>{
+  syncActiveTeam();const team=button.dataset.trainingTeam,data=state.teamData[team]||emptyTeamData(),person=data.people.find(item=>item.id===button.dataset.trainingPerson);if(!person)return;
+  const skill=button.dataset.trainingSkill;person.skills=person.skills.includes(skill)?person.skills.filter(item=>item!==skill):[...person.skills,skill];
+  if(team===state.team)applyTeamData(data);render();toast(`${person.name}: ${skill} ${person.skills.includes(skill)?'added':'removed'}`);
+ });
+ $$('[data-training-add]').forEach(button=>button.onclick=()=>{const next=button.dataset.trainingAdd;if(next!==state.team){syncActiveTeam();state.team=next;applyTeamData(state.teamData[next]||emptyTeamData())}render();$('#teamDialog').showModal()});
 }
 function skillFromText(value){
  const v=String(value||'').trim().toLowerCase().replace(/[-_]/g,' ');
@@ -395,20 +405,21 @@ function parseExcelPeople(text){
    return {name,skills:[...new Set(skills)]};
  }).filter(p=>p.name);
 }
-function updateExcelPreview(){const people=parseExcelPeople($('#excelPaste').value);$('#importExcelBtn').disabled=!people.length;$('#excelHint').textContent=people.length?`Employees recognised: ${people.length}`:'Supported columns: Palletizer, Packer, AP, WT, W1, W2, SC, NEW, Stacker trained, Urinal lines'}
+function updateExcelPreview(){const people=parseExcelPeople($('#excelPaste').value);$('#importExcelBtn').disabled=!people.length;$('#excelHint').textContent=people.length?`Employees recognised: ${people.length}. Assign skills in Training.`:'Employee names are imported; skills are managed in Training.'}
 function updateClock(){const n=new Date();$('#clock').textContent=n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});$('#todayLabel').textContent=n.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'}).toUpperCase()}
-function showView(view){const attendance=view==='workers';$('#dashboardView').classList.toggle('hidden',attendance);$('#attendanceView').classList.toggle('hidden',!attendance);$('#todayBtn').classList.toggle('nav-active',!attendance);$('#workersBtn').classList.toggle('nav-active',attendance);document.body.classList.toggle('attendance-open',attendance);if(attendance)renderAttendance();window.scrollTo({top:0,behavior:'smooth'})}
+function showView(view){const attendance=view==='workers',training=view==='training',dashboard=!attendance&&!training;$('#dashboardView').classList.toggle('hidden',!dashboard);$('#attendanceView').classList.toggle('hidden',!attendance);$('#trainingView').classList.toggle('hidden',!training);$('#todayBtn').classList.toggle('nav-active',dashboard);$('#workersBtn').classList.toggle('nav-active',attendance);$('#trainingBtn').classList.toggle('nav-active',training);document.body.classList.toggle('attendance-open',!dashboard);if(attendance)renderAttendance();if(training)renderTraining();window.scrollTo({top:0,behavior:'smooth'})}
 $$('.shift').forEach(b=>b.onclick=()=>{state.shift=b.dataset.shift;state.started=false;render()});
 $$('[data-team]').forEach(b=>b.onclick=()=>{const next=b.dataset.team;if(next===state.team)return;syncActiveTeam();state.team=next;applyTeamData(state.teamData[next]||emptyTeamData());render();toast('Team: '+TEAMS[state.team])});
 $('#startBtn').onclick=()=>{assignInitial();state.started=true;render();toast('Shift plan is ready')};
 $('#addPersonBtn').onclick=()=>$('#teamDialog').showModal();
-$('#todayBtn').onclick=$('#backToPlanBtn').onclick=()=>showView('today');
+$('#todayBtn').onclick=$('#backToPlanBtn').onclick=$('#backFromTrainingBtn').onclick=()=>showView('today');
 $('#workersBtn').onclick=()=>showView('workers');
+$('#trainingBtn').onclick=()=>showView('training');
 $('#scheduleBtn').onclick=()=>{showView('today');setTimeout(()=>$('#timelineSection').scrollIntoView({behavior:'smooth'}),220)};
 $$('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
-$('#personForm').onsubmit=e=>{e.preventDefault();const name=$('#personName').value.trim();const skills=$$('#skillPicks input:checked').map(x=>x.value);state.people.push({id:'p'+Date.now(),name,skills,present:true});e.target.reset();render();toast(name+' added')};
+$('#personForm').onsubmit=e=>{e.preventDefault();const name=$('#personName').value.trim();state.people.push({id:'p'+Date.now(),name,skills:[],present:true});e.target.reset();render();toast(name+' added. Assign skills in Training')};
 $('#excelPaste').oninput=updateExcelPreview;
-$('#importExcelBtn').onclick=()=>{const incoming=parseExcelPeople($('#excelPaste').value);let added=0,updated=0;incoming.forEach((person,i)=>{const existing=state.people.find(p=>p.name.trim().toLowerCase()===person.name.toLowerCase());if(existing){const merged=[...new Set([...existing.skills,...person.skills])];if(merged.length!==existing.skills.length){existing.skills=merged;updated++}}else{state.people.push({id:'p'+Date.now()+'-'+i,name:person.name,skills:person.skills,present:true});added++}});$('#excelPaste').value='';updateExcelPreview();render();toast(`Imported: ${added} new${updated?', '+updated+' updated':''}`)};
+$('#importExcelBtn').onclick=()=>{const incoming=parseExcelPeople($('#excelPaste').value);let added=0;incoming.forEach((person,i)=>{const existing=state.people.find(p=>p.name.trim().toLowerCase()===person.name.toLowerCase());if(!existing){state.people.push({id:'p'+Date.now()+'-'+i,name:person.name,skills:[],present:true});added++}});$('#excelPaste').value='';updateExcelPreview();render();toast(`Imported: ${added}. Assign skills in Training`)};
 $('#resetBtn').onclick=()=>{const warning=cloud.active?'Reset the shared employee list and plan for ALL users?':'Reset employees and the plan to the demo version?';if(confirm(warning)){localStorage.removeItem(LOCAL_KEY);state=normalizeState(freshState());render();if(cloud.active)pushCloudState();else location.reload()}};
 $('#exportBtn').onclick=async()=>{const text=$$('.event').map(e=>e.innerText.replace(/\n/g,' — ')).join('\n');await navigator.clipboard.writeText(text);toast('Plan copied')};
 function printPlan(){document.body.classList.add('printing-plan');window.print()}
